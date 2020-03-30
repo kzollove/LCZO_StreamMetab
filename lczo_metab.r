@@ -26,9 +26,9 @@ if(length(new_usgs_packages)) remotes::install_github(new_usgs_packages, INSTALL
 
 
 library(streamMetabolizer)
-library(dplyr)
+library(tidyverse)
 
-dat <- data_metab(num_days='3', res='15', day_start=4, day_end=28, attach.units=TRUE)
-
-dim(dat)
-dat[c(1,23,45,100),]
+depth <- read_csv("./data/QS_depth_190404.csv")
+DO <- read_csv("./data/QS_DO_190404.csv")
+light <- read_csv("./data/QS_light_190404.csv")
+temp <- read_csv("./data/QS_temp_190404.csv")
