@@ -32,3 +32,29 @@ depth <- read_csv("./data/QS_depth_190404.csv")
 DO <- read_csv("./data/QS_DO_190404.csv")
 light <- read_csv("./data/QS_light_190404.csv")
 temp <- read_csv("./data/QS_temp_190404.csv")
+
+param_list <-  c("depth", "DO", "light", "temp")
+
+depth <- depth %>% 
+  select(datetime = names(depth)[1],
+         stage = `Stage Height -unit-ft-processing level-L0`)
+head(names(temp)[1])
+DO <- DO %>% 
+  select(datetime = `Date and Time`,
+         conc = `DO Adj Conc -unit-mg/L-processing level-L1 passed QAQC`)
+
+light <- light %>% 
+  select(datetime = `Date and Time`,
+         lux = `Light Intensity -unit-Lux-processing level-L0`)
+
+temp <- temp %>% 
+  select(datetime = `Date and Time`,
+         temp = `Water temperature -unit-C-processing level-L1 passed QAQC`)
+
+qs <- depth %>% 
+  full_join(DO, by="datetime") %>% 
+  full_join(temp, by="datetime") %>% 
+  full_join(light, by="datetime")
+
+
+qs
