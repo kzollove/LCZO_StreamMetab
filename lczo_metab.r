@@ -26,6 +26,8 @@ if(length(new_usgs_packages)) remotes::install_github(new_usgs_packages, INSTALL
 
 
 library(streamMetabolizer)
+library(unitted)
+library(lubridate)
 library(tidyverse)
 
 depth <- read_csv("./data/QS_depth_190404.csv")
@@ -62,5 +64,18 @@ qs <- depth %>%
 qs <- qs %>% 
   mutate(pres = pres * 10) #convert kPa to mbar
 
+qs <- qs %>% #Use internal function to calulated DO.sat
+  mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres, "mb"), sal=u(0, "PSU")))
 
+qs$datetime <- qs$datetime %>% 
+  force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
+
+qs$solar.time <- calc_solar_time(qs$datetime, longitude = -65.8) #Calculate solar time
+#QS now has all the external data that we need.
+##Time is in local POSIXct, needs to be converted to solar.time
+##
 head(qs)
+dat <- data_metab(num_days="3", res='15', attach.units = TRUE)
+str(dat)
+str(qs)
+head(dat)
