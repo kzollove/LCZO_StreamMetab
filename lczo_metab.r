@@ -62,20 +62,29 @@ qs <- depth %>%
   full_join(pres, by="datetime")
 
 qs <- qs %>% 
-  mutate(pres = pres * 10) #convert kPa to mbar
+  mutate(pres_mbar = pres * 10, #convert kPa to mbar
+         light = lux * 0.0185 #convert lux to ppfd
+         ) 
 
 qs <- qs %>% #Use internal function to calulated DO.sat
-  mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres, "mb"), sal=u(0, "PSU")))
+  mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres_mbar, "mb"), sal=u(0, "PSU")))
 
 qs$datetime <- qs$datetime %>% 
   force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
 
 qs$solar.time <- calc_solar_time(qs$datetime, longitude = -65.8) #Calculate solar time
-#QS now has all the external data that we need.
-##Time is in local POSIXct, needs to be converted to solar.time
-##
-head(qs)
+
+#qs now has all data
+#we are going to create new, final dataframe that mirrors example
+
+qs_dat <- qs %>% 
+  select(solar.time,
+         DO.obs = conc,
+         DO.sat,
+         depth = stage,
+         temp.water = temp,
+         light
+         )
+
 dat <- data_metab(num_days="3", res='15', attach.units = TRUE)
-str(dat)
-str(qs)
-head(dat)
+
