@@ -24,6 +24,7 @@ DO <- read_csv("./data/QS_DO_190404.csv")
 light <- read_csv("./data/QS_light_190404.csv")
 temp <- read_csv("./data/QS_temp_190404.csv")
 pres <- read_csv("./data/QS_AbPr_190404.csv")
+Q <- read_csv("./data/QS_discharge_190404.csv")
 
 depth <- depth %>% 
   select(datetime = names(depth)[1],
@@ -43,6 +44,16 @@ temp <- temp %>%
 pres <- pres %>% 
   select(datetime = `Date and Time`,
          pres = `Barometric pressure -unit-kPa-processing level-L0`)
+
+Q <- Q %>% 
+  select(datetime = `Date and Time`,
+         discharge = `discharge -unit-cfs-processing level-L0`)
+Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
+
+Q_daily <- Q %>% 
+  mutate(date = as_date(datetime)) %>% 
+  group_by(date) %>% 
+  summarize(discharge.daily = mean(discharge))
 
 qs <- depth %>% 
   full_join(DO, by="datetime") %>% 
