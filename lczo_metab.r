@@ -5,6 +5,8 @@
 #If receiving error "failed to lock directory"
 #Try unlink(<directory-that-is-00LOCK>, recursive = TRUE)
 
+#install.packages('rstan') #This is specifically for bayesian
+
 ##### FOR ISSUE ON FITTING Ks by Q:
 #https://github.com/USGS-R/streamMetabolizer/issues/373
 #####
@@ -55,14 +57,18 @@ Q_daily <- Q %>%
   group_by(date) %>% 
   summarize(discharge.daily = mean(discharge))
 
+lnK <- Q_daily %>% 
+  transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit 
+lnK <- lnK$lnK
+
 qs <- depth %>% 
   full_join(DO, by="datetime") %>% 
   full_join(temp, by="datetime") %>% 
   full_join(light, by="datetime") %>% 
   full_join(pres, by="datetime")
 
-qs <- qs %>% 
-  drop_na()
+#qs <- qs %>% 
+ # drop_na()
 
 qs <- qs %>% 
   mutate(pres_mbar = pres * 10, #convert kPa to mbar
@@ -77,6 +83,8 @@ qs$datetime <- qs$datetime %>%
   force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
 
 qs$solar.time <- calc_solar_time(qs$datetime, longitude = -65.8) #Calculate solar time
+
+#qs$cal_light <- calc_light(u(qs$solar.time), u(18.32, 'degN'), u(-65.81, 'degE'), u(4282.162, 'umol m^-2 s^-1'), attach.units=TRUE)
 
 #qs now has all data
 #we are going to create new, final dataframe that mirrors example
@@ -95,7 +103,7 @@ qs_dat <- qs %>%
 
 #qs_dat <-  qs_dat %>% drop_na() 
 
-dat <- data_metab(num_days="3", res='15', attach.units = TRUE)
+#dat <- data_metab(num_days="3", res='15', attach.units = TRUE)
 
 qs_dat %>% unitted::v() %>%
   mutate(DO.pctsat = 100 * (DO.obs / DO.sat)) %>%
@@ -117,8 +125,17 @@ qs_dat %>% unitted::v() %>%
   facet_grid(units ~ ., scale='free_y') + theme_bw() +
   scale_color_discrete('variable')
 
-mm_classic <- 
-  mm_name('mle') %>% 
-  specs(day_start = 3.5, day_end = 27.5) %>% #start at 3/29 03:00 and end 4/04 03:00
-  metab(qs_dat_trunc)
-mm_classic
+# mm_classic <- 
+#   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>% 
+#   specs(day_start = 3.5, day_end = 27.5) %>% #start at 3/29 03:00 and end 4/04 03:00
+#   metab(qs_dat)
+# mm_classic
+# 
+# get_params(mm_classic) %>% 
+#   select(date, warnings, errors)
+
+bayes_name <- mm_name(type='bayes', pool_K600="binned", err_obs_iid=TRUE, err_proc_iid=TRUE)
+bayes_specs <- specs(bayes_name, K600_lnQ_nodes_centers = log(1:7), K600_lnQ_nodes_meanlog = lnK, K600_lnQ_nodes_sdlog = 0.00001, K600_lnQ_nodediffs_sdlog = 1000) 
+
+mm <- metab(bayes_specs, data=qs_dat, data_daily=Q_daily)
+
