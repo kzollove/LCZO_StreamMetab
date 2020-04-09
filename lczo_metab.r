@@ -5,7 +5,10 @@
 #If receiving error "failed to lock directory"
 #Try unlink(<directory-that-is-00LOCK>, recursive = TRUE)
 
-#install.packages('rstan') #This is specifically for bayesian
+#remove.packages('rstan')
+#NEXT LINE WILL REMOVE YOUR .RData file! IF YOU CARE ABOUT THAT DONT RUN THIS LINE
+#if (file.exists(".RData")) file.remove(".RData") 
+#install.packages('rstan', repos = "https://cloud.r-project.org/", dependencies = TRUE) #This is specifically for bayesian
 
 ##### FOR ISSUE ON FITTING Ks by Q:
 #https://github.com/USGS-R/streamMetabolizer/issues/373
@@ -70,6 +73,26 @@ qs <- depth %>%
 #qs <- qs %>% 
  # drop_na()
 
+qs %>% 
+  subset(is.na(stage))
+
+qs_daily <- qs %>% 
+  mutate(date = as_date(datetime)) %>%
+  group_by(date) %>%
+  summarize(conc = mean(conc, na.rm = TRUE),
+            temp = mean(temp, na.rm = TRUE),
+            stage = mean(stage, na.rm = TRUE),
+            lux = mean(lux, na.rm = TRUE),
+            pres = mean(pres, na.rm = TRUE)
+            )
+
+qs <- qs %>% 
+  filter(minute(datetime) %% 15 == 0) #Get rid of extra time points
+
+qs <- qs %>%
+  group_by(date(datetime)) %>% 
+  mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
+
 qs <- qs %>% 
   mutate(pres_mbar = pres * 10, #convert kPa to mbar
          light = lux * 0.0185 #convert lux to ppfd
@@ -77,7 +100,6 @@ qs <- qs %>%
 
 qs <- qs %>% #Use internal function to calulated DO.sat
   mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres_mbar, "mb"), sal=u(0, "PSU")))
-
 
 qs$datetime <- qs$datetime %>% 
   force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
@@ -100,6 +122,7 @@ qs_dat <- qs %>%
          temp.water = temp,
          light
          )
+
 
 #qs_dat <-  qs_dat %>% drop_na() 
 
@@ -125,17 +148,21 @@ qs_dat %>% unitted::v() %>%
   facet_grid(units ~ ., scale='free_y') + theme_bw() +
   scale_color_discrete('variable')
 
-# mm_classic <- 
-#   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>% 
-#   specs(day_start = 3.5, day_end = 27.5) %>% #start at 3/29 03:00 and end 4/04 03:00
-#   metab(qs_dat)
-# mm_classic
-# 
-# get_params(mm_classic) %>% 
-#   select(date, warnings, errors)
+mm_classic <-
+  mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
+  specs(day_start = 3.5, day_end = 27.5) %>% #start at 3/29 03:00 and end 4/04 03:00
+  metab(qs_dat)
+mm_classic
+
+get_params(mm_classic) %>%
+  select(date, warnings, errors)
 
 bayes_name <- mm_name(type='bayes', pool_K600="binned", err_obs_iid=TRUE, err_proc_iid=TRUE)
 bayes_specs <- specs(bayes_name, K600_lnQ_nodes_centers = log(1:7), K600_lnQ_nodes_meanlog = lnK, K600_lnQ_nodes_sdlog = 0.00001, K600_lnQ_nodediffs_sdlog = 1000) 
 
 mm <- metab(bayes_specs, data=qs_dat, data_daily=Q_daily)
 
+
+plot_DO_preds(mm)
+
+View(qs)
