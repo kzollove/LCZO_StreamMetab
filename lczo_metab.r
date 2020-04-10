@@ -24,35 +24,38 @@ library(lubridate)
 library(tidyverse)
 library(xts)
 
-depth <- read_csv("./data/QS_depth_190404.csv")
-DO <- read_csv("./data/QS_DO_190404.csv")
-light <- read_csv("./data/QS_light_190404.csv")
-temp <- read_csv("./data/QS_temp_190404.csv")
-pres <- read_csv("./data/QS_AbPr_190404.csv")
-Q <- read_csv("./data/QS_discharge_190404.csv")
+depth <- read_csv("./data/depth.csv")
+DO <- read_csv("./data/DO.csv")
+light <- read_csv("./data/light.csv")
+temp <- read_csv("./data/temp.csv")
+pres <- read_csv("./data/AbPr.csv")
+Q <- read_csv("./data/discharge.csv")
 
 depth <- depth %>% 
   select(datetime = names(depth)[1],
-         stage = `Stage Height -unit-ft-processing level-L0`)
+         stage = names(depth)[4]
+  )
 
 DO <- DO %>% 
   select(datetime = `Date and Time`,
-         conc = `DO Adj Conc -unit-mg/L-processing level-L1 passed QAQC`)
+         conc = names(DO)[4]
+         )
 
 light <- light %>% 
   select(datetime = `Date and Time`,
-         lux = `Light Intensity -unit-Lux-processing level-L0`)
+         lux = names(light)[4]
+         )
 
 temp <- temp %>% 
   select(datetime = `Date and Time`,
-         temp = `Water temperature -unit-C-processing level-L1 passed QAQC`)
+         temp = names(temp)[4])
 pres <- pres %>% 
   select(datetime = `Date and Time`,
-         pres = `Barometric pressure -unit-kPa-processing level-L0`)
+         pres = names(pres)[4])
 
 Q <- Q %>% 
   select(datetime = `Date and Time`,
-         discharge = `discharge -unit-cfs-processing level-L0`)
+         discharge = names(Q)[4])
 Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
 
 Q_daily <- Q %>% 
@@ -89,9 +92,9 @@ qs_daily <- qs %>%
 qs <- qs %>% 
   filter(minute(datetime) %% 15 == 0) #Get rid of extra time points
 
-qs <- qs %>%
-  group_by(date(datetime)) %>% 
-  mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
+# qs <- qs %>%
+#   group_by(date(datetime)) %>% 
+#   mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
 
 qs <- qs %>% 
   mutate(pres_mbar = pres * 10, #convert kPa to mbar
@@ -100,6 +103,9 @@ qs <- qs %>%
 
 qs <- qs %>% #Use internal function to calulated DO.sat
   mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres_mbar, "mb"), sal=u(0, "PSU")))
+
+
+
 
 qs$datetime <- qs$datetime %>% 
   force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
@@ -150,7 +156,7 @@ qs_dat %>% unitted::v() %>%
 
 mm_classic <-
   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
-  specs(day_start = 3.5, day_end = 27.5) %>% #start at 3/29 03:00 and end 4/04 03:00
+  specs(day_start = 1, day_end = 25) %>% #start at 3/29 03:00 and end 4/04 03:00
   metab(qs_dat)
 mm_classic
 
