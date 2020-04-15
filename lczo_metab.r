@@ -23,6 +23,7 @@ library(unitted)
 library(lubridate)
 library(tidyverse)
 library(xts)
+library(directlabels)
 
 depth <- read_csv("./data/depth.csv")
 DO <- read_csv("./data/DO.csv")
@@ -156,19 +157,42 @@ qs_dat %>% unitted::v() %>%
 
 mm_classic <-
   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
-  specs(day_start = 1, day_end = 25) %>% #start at 3/29 03:00 and end 4/04 03:00
+  specs(day_start = 1.5, day_end = 25.5) %>% #start at 3/29 03:00 and end 4/04 03:00
   metab(qs_dat)
 mm_classic
 
 get_params(mm_classic) %>%
   select(date, warnings, errors)
 
-bayes_name <- mm_name(type='bayes', pool_K600="binned", err_obs_iid=TRUE, err_proc_iid=TRUE)
-bayes_specs <- specs(bayes_name, K600_lnQ_nodes_centers = log(1:7), K600_lnQ_nodes_meanlog = lnK, K600_lnQ_nodes_sdlog = 0.00001, K600_lnQ_nodediffs_sdlog = 1000) 
+# bayes_name <- mm_name(type='bayes', pool_K600="binned", err_obs_iid=TRUE, err_proc_iid=TRUE)
+# bayes_specs <- specs(bayes_name, K600_lnQ_nodes_centers = log(1:7), K600_lnQ_nodes_meanlog = lnK, K600_lnQ_nodes_sdlog = 0.00001, K600_lnQ_nodediffs_sdlog = 1000) 
+# 
+# mm <- metab(bayes_specs, data=qs_dat, data_daily=Q_daily)
 
-mm <- metab(bayes_specs, data=qs_dat, data_daily=Q_daily)
+
+plot_DO_preds(mm_classic)
+
+K600_compare <- Q_daily %>% 
+  mutate(
+    date = Q_daily$date,
+    LCZO = Q_daily$discharge.daily * 2369.2 + 18.909,
+    Fit = mm_classic@fit$K600.daily
+    ) %>% 
+  gather(key = "K600_origin", value = "K600", LCZO, Fit)
+
+ggplot(K600_compare, aes(x = date, y = K600, group = K600_origin, color = K600_origin)) +
+  geom_line() + 
+  scale_colour_discrete(guide = 'none') +
+  scale_x_date(expand=c(0, 2)) +
+  geom_dl(aes(label = K600_origin), method = list(dl.trans(x = x + 0.2), "last.points", cex = 0.98)) +
+  labs(
+  title = 'K600',
+  subtitle = 'LCZO and Fit',
+  y = 'K600'
+)
+
+plot_metab_preds(mm_classic)
 
 
-plot_DO_preds(mm)
 
 View(qs)
