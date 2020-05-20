@@ -130,7 +130,7 @@ get_orig_name <- function(df){
 }
 
 #Function to select datetime and variable of interest from each individual csv
-dateTimeAndValue <- function(df) {
+select_value <- function(df) {
 
   value_name <- ifelse(
     quo_name(deparse(substitute(df))) == ".",
@@ -145,12 +145,12 @@ dateTimeAndValue <- function(df) {
   )
 }
 
-depth <- depth %>% dateTimeAndValue()
-DO <- DO %>% dateTimeAndValue()
-light <- light %>% dateTimeAndValue()
-temp <- temp %>% dateTimeAndValue()
-pres <- pres %>% dateTimeAndValue()
-Q <- Q %>% dateTimeAndValue()
+depth <- depth %>% select_value()
+DO <- DO %>% select_value()
+light <- light %>% select_value()
+temp <- temp %>% select_value()
+pres <- pres %>% select_value()
+Q <- Q %>% select_value()
 
 Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
 
