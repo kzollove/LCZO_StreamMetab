@@ -24,6 +24,94 @@ library(lubridate)
 library(tidyverse)
 library(xts)
 library(directlabels)
+library('RPostgreSQL')
+
+# Define series IDs for parameters:
+
+series.datetime.full <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2020-01-01 00:00:00'"
+series.datetime.drought <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2016-01-01 00:00:00'"
+series.datetime.hurricane <- "valuedatetime >= '2017-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'"
+
+QS.series.DO <- "7"
+QS.series.Temp <- "8"
+QS.series.Light <- "16675" #8/03/16 --->
+QS.series.Baro <- "16154" #01/12/16 --->
+QS.series.Depth <- #Will have to convert from Baro using manual readings
+QP.series.DO <- "21"
+QP.series.Temp <- "22"
+QP.series.Light <- "16672" #8/30/16 --->
+QP.series.Baro <- #Will convert from QS
+QP.series.Depth <- "18560"
+RI.series.DO <- "17217" #2/20/17 --->
+RI.series.Temp <- "17218" 
+RI.series.Light <- "16774" #9/3/16 --->
+RI.series.Baro <- "17270" #2/21/17 --->
+RI.series.Depth <- ""
+
+
+
+# Connect to local DB and download data -----------------------------------
+# Must have db "ODM2LCZO" in Postgres
+# Remember to turn local database on
+
+con <- dbDriver("PostgreSQL") %>% 
+dbConnect(pg, user="postgres", password="Cranmore12",
+                host="127.0.0.1", port=5432, dbname="ODM2LCZO")
+
+### TODO write a new query ###
+#Sample Query
+dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS') as valuedateandtime, datavalue 
+                     from odm2.timeseriesresultvalues where resultid=18560 and valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'
+                          order by valuedatetime") # and valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2018-01-01 00:00:00'
+
+# This data is not yet from database
+# Need to make a good system of downloading and organizing from database
+
+
+
+
+
+# Structure ---------------------------------------------------------------
+
+##### TIME PERIODS
+## Pre-Drought
+## Drought
+## Post-Drought
+## Pre Hurricane
+## Hurricane
+## Post Hurricane
+##### SITES
+# Rio Icacos
+# Quebrada Sonadora
+# Quebrada Prieta
+
+# TODO --------------------------------------------------------------------
+##### Define time periods
+## Pre-Drought
+# From Gutierrez et al
+## Drought
+# From Gutierrez et al
+## Post-Drought
+# From Gutierrez et al
+## Pre Hurricane
+## Hurricane
+## Post Hurricane
+
+##### Download data from db for time periods
+### Define data system
+## Pre-Drought
+## Drought
+## Post-Drought
+## Pre Hurricane
+## Hurricane
+## Post Hurricane
+
+##### Refactor current code to run for all new data
+### Tidying
+## Merging tables
+## Daily discharges
+
+
 
 depth <- read_csv("./data/depth.csv")
 DO <- read_csv("./data/DO.csv")
@@ -31,6 +119,9 @@ light <- read_csv("./data/light.csv")
 temp <- read_csv("./data/temp.csv")
 pres <- read_csv("./data/AbPr.csv")
 Q <- read_csv("./data/discharge.csv")
+
+
+
 
 depth <- depth %>% 
   select(datetime = names(depth)[1],
