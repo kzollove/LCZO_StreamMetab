@@ -120,34 +120,38 @@ temp <- read_csv("./data/temp.csv")
 pres <- read_csv("./data/AbPr.csv")
 Q <- read_csv("./data/discharge.csv")
 
+#This function is necessary to make future functions "pipeable"
+get_orig_name <- function(df){
+  i <- 1
+  while(!("chain_parts" %in% ls(envir=parent.frame(i))) && i < sys.nframe()) {
+    i <- i+1
+  }
+  list(name = deparse(parent.frame(i)$lhs), output = df)
+}
 
+#Function to select datetime and variable of interest from each individual csv
+dateTimeAndValue <- function(df) {
 
+  value_name <- ifelse(
+    quo_name(deparse(substitute(df))) == ".",
+    get_orig_name(df)$name,
+    quo_name(deparse(substitute(df)))
+    ) 
 
-depth <- depth %>% 
-  select(datetime = names(depth)[1],
-         stage = names(depth)[4]
+  select(
+    df,
+    datetime = `Date and Time`,
+    !! value_name := names(df)[4]
   )
+}
 
-DO <- DO %>% 
-  select(datetime = `Date and Time`,
-         conc = names(DO)[4]
-         )
+depth <- depth %>% dateTimeAndValue()
+DO <- DO %>% dateTimeAndValue()
+light <- light %>% dateTimeAndValue()
+temp <- temp %>% dateTimeAndValue()
+pres <- pres %>% dateTimeAndValue()
+Q <- Q %>% dateTimeAndValue()
 
-light <- light %>% 
-  select(datetime = `Date and Time`,
-         lux = names(light)[4]
-         )
-
-temp <- temp %>% 
-  select(datetime = `Date and Time`,
-         temp = names(temp)[4])
-pres <- pres %>% 
-  select(datetime = `Date and Time`,
-         pres = names(pres)[4])
-
-Q <- Q %>% 
-  select(datetime = `Date and Time`,
-         discharge = names(Q)[4])
 Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
 
 Q_daily <- Q %>% 
