@@ -43,8 +43,8 @@ data_id <- list(
     DO = "21",
     Temp = "22",
     Light = "16672", #8/30/16 --->
-    Discharge = "18657",
-    elev = 384
+    Discharge = "18657"
+    # elev = 384
   ),
   RI = list(
     DO = "17217", #2/20/17 --->
@@ -155,18 +155,6 @@ get_all_ODM2 <- function(
 ## Daily discharges
 
 
-DO <- get_ODM2_data(site = 'QS', parameter = 'DO')
-Temperature <- get_ODM2_data(site = 'QS', parameter = 'Temp')
-Light <- get_ODM2_data(site = 'QS', parameter = 'Light')
-Baro <- get_ODM2_data(site = 'QS', parameter = 'Light')
-
-# depth <- read_csv("./data/raw/depth.csv")
-# DO <- read_csv("./data/raw/DO.csv")
-# light <- read_csv("./data/raw/light.csv")
-# temp <- read_csv("./data/raw/temp.csv")
-# pres <- read_csv("./data/raw/AbPr.csv")
-# Q <- read_csv("./data/raw/discharge.csv")
-
 #This function is necessary to make future functions "pipeable"
 get_orig_name <- function(df){
   i <- 1
@@ -192,13 +180,6 @@ select_value_odmCSV <- function(df) {
   )
 }
 
-depth <- depth %>% select_value()
-DO <- DO %>% select_value()
-light <- light %>% select_value()
-temp <- temp %>% select_value()
-pres <- pres %>% select_value()
-Q <- Q %>% select_value()
-
 Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
 
 Q_daily <- Q %>% 
@@ -209,15 +190,6 @@ Q_daily <- Q %>%
 lnK <- Q_daily %>% 
   transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit 
 lnK <- lnK$lnK
-
-qs <- depth %>% 
-  full_join(DO, by="datetime") %>% 
-  full_join(temp, by="datetime") %>% 
-  full_join(light, by="datetime") %>% 
-  full_join(pres, by="datetime")
-
-#qs <- qs %>% 
- # drop_na()
 
 qs %>% 
   subset(is.na(stage))
