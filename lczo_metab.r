@@ -24,29 +24,27 @@ library(lubridate)
 library(tidyverse)
 library(xts)
 library(directlabels)
+library(dataRetrieval)
 library('RPostgreSQL')
 
-# Define series IDs for parameters:
-
-series.datetime.full <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2020-01-01 00:00:00'"
-series.datetime.drought <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2016-01-01 00:00:00'"
-series.datetime.hurricane <- "valuedatetime >= '2017-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'"
-
 #List object of all ODM2 Data series IDs
-#QP Baro to be derived from QS Baro
-#Drought Baro for QS to be derived from SJU Airport baro
+#Baros from calc_air_pressure (will check with QS and RI baro to see how they compare)
+#Depths derived from discharge
+#Try calc_light_merged
 data_id <- list(
   QS = list(
     DO = "7",
     Temp = "8",
     Light = "16675", #8/03/16 --->
-    Baro = "16154" #01/12/16 --->
+    Baro = "16154", #01/12/16 --->
+    Discharge = "17274" #09/05/16 --->
   ),
   QP = list(
     DO = "21",
     Temp = "22",
     Light = "16672", #8/30/16 --->
-    Baro = ""
+    Discharge = "18657",
+    elev = 384
   ),
   RI = list(
     DO = "17217", #2/20/17 --->
@@ -59,22 +57,51 @@ data_id <- list(
 
 # Connect to local DB and download data -----------------------------------
 # Must have db "ODM2LCZO" in Postgres
-# Remember to turn local database on
 
-con <- dbDriver("PostgreSQL") %>% 
-dbConnect(pg, user="postgres", password="Cranmore12",
+get_ODM2_data <- function(
+  series = '',
+  start = '2015-01-01 00:00:00',
+  end = '2019-01-01 00:00:00',
+  site = '',
+  parameter = ''
+  ) {
+  
+  if (!con@Id[1] > 0) {
+    library('RPostgreSQL')
+    con <- dbDriver("PostgreSQL") %>% 
+      dbConnect(user="postgres", password="Cranmore12",
                 host="127.0.0.1", port=5432, dbname="ODM2LCZO")
+  }
+  
+  if(series == '') {
+    series <-  data_id[[site]][[parameter]]
+  }
+  
+  query <- str_interp(
+    "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS')
+      as valuedateandtime, datavalue 
+      from odm2.timeseriesresultvalues
+      where resultid=${series}
+      and valuedatetime >= '${start}'
+      and valuedatetime <= '${end}'
+    order by valuedatetime"
+  )
+  
+    dbGetQuery(con, query)
+}
 
-# TODO finalize Query
-#Sample Query
-dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS') as valuedateandtime, datavalue 
-                     from odm2.timeseriesresultvalues where resultid=18560 and valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'
-                          order by valuedatetime") # and valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2018-01-01 00:00:00'
-
-# This data is not yet from database
-# Need to make a good system of downloading and organizing from database
-
-
+get_all_ODM2 <- function(
+  site,
+  start = '2015-01-01 00:00:00',
+  end = '2019-01-01 00:00:00'
+  ) {
+  for (i in seq_along(data_id[[site]])) {
+    if (data_id[[site]][[i]] != '') {
+      get_ODM2_data(series = data_id[[site]][[i]], start = start, end = end)
+      print(names(data_id[[site]][i]))
+    }
+  }
+}
 
 
 
@@ -104,13 +131,17 @@ dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS
 ## Daily discharges
 
 
+DO <- get_ODM2_data(site = 'QS', parameter = 'DO')
+Temperature <- get_ODM2_data(site = 'QS', parameter = 'Temp')
+Light <- get_ODM2_data(site = 'QS', parameter = 'Light')
+Baro <- get_ODM2_data(site = 'QS', parameter = 'Light')
 
-depth <- read_csv("./data/depth.csv")
-DO <- read_csv("./data/DO.csv")
-light <- read_csv("./data/light.csv")
-temp <- read_csv("./data/temp.csv")
-pres <- read_csv("./data/AbPr.csv")
-Q <- read_csv("./data/discharge.csv")
+# depth <- read_csv("./data/raw/depth.csv")
+# DO <- read_csv("./data/raw/DO.csv")
+# light <- read_csv("./data/raw/light.csv")
+# temp <- read_csv("./data/raw/temp.csv")
+# pres <- read_csv("./data/raw/AbPr.csv")
+# Q <- read_csv("./data/raw/discharge.csv")
 
 #This function is necessary to make future functions "pipeable"
 get_orig_name <- function(df){
@@ -122,7 +153,7 @@ get_orig_name <- function(df){
 }
 
 #Function to select datetime and variable of interest from each individual csv
-select_value <- function(df) {
+select_value_odmCSV <- function(df) {
 
   value_name <- ifelse(
     quo_name(deparse(substitute(df))) == ".",
