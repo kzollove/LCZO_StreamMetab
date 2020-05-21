@@ -32,43 +32,27 @@ series.datetime.full <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetim
 series.datetime.drought <- "valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2016-01-01 00:00:00'"
 series.datetime.hurricane <- "valuedatetime >= '2017-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'"
 
-QS.series.DO <- "7"
-QS.series.Temp <- "8"
-QS.series.Light <- "16675" #8/03/16 --->
-QS.series.Baro <- "16154" #01/12/16 --->
-QS.series.Depth <- #Will have to convert from Baro using manual readings
-QP.series.DO <- "21"
-QP.series.Temp <- "22"
-QP.series.Light <- "16672" #8/30/16 --->
-QP.series.Baro <- #Will convert from QS
-QP.series.Depth <- "18560"
-RI.series.DO <- "17217" #2/20/17 --->
-RI.series.Temp <- "17218" 
-RI.series.Light <- "16774" #9/3/16 --->
-RI.series.Baro <- "17270" #2/21/17 --->
-RI.series.Depth <- ""
-
+#List object of all ODM2 Data series IDs
+#QP Baro to be derived from QS Baro
+#Drought Baro for QS to be derived from SJU Airport baro
 data_id <- list(
   QS = list(
     DO = "7",
     Temp = "8",
-    Light = "16675",
-    Baro = "16154",
-    Depth = ""
+    Light = "16675", #8/03/16 --->
+    Baro = "16154" #01/12/16 --->
   ),
   QP = list(
     DO = "21",
     Temp = "22",
-    Light = "16672",
-    Baro = "",
-    Depth = "18560"
+    Light = "16672", #8/30/16 --->
+    Baro = ""
   ),
   RI = list(
-    DO = "17217",
+    DO = "17217", #2/20/17 --->
     Temp = "17218",
-    Light = "16774",
-    Baro = "17270",
-    Depth = ""
+    Light = "16774", #9/3/16 --->
+    Baro = "17270" #2/21/17 --->
   )
 )
 
@@ -81,7 +65,7 @@ con <- dbDriver("PostgreSQL") %>%
 dbConnect(pg, user="postgres", password="Cranmore12",
                 host="127.0.0.1", port=5432, dbname="ODM2LCZO")
 
-### TODO write a new query ###
+# TODO finalize Query
 #Sample Query
 dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS') as valuedateandtime, datavalue 
                      from odm2.timeseriesresultvalues where resultid=18560 and valuedatetime >= '2015-01-01 00:00:00' and valuedatetime <='2019-01-01 00:00:00'
@@ -109,7 +93,9 @@ dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS
 # Quebrada Prieta
 
 # TODO --------------------------------------------------------------------
-
+#### TODO incorporate calc_depth()
+## calc_depth() takes discharge and estimates depth using hydraulic geometry coefficients
+# this seems to be elaborated on in Raymond et al 2012
 
 
 ##### Refactor current code to run for all new data
