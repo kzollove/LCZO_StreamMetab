@@ -97,10 +97,34 @@ get_all_ODM2 <- function(
   ) {
   for (i in seq_along(data_id[[site]])) {
     if (data_id[[site]][[i]] != '') {
-      get_ODM2_data(series = data_id[[site]][[i]], start = start, end = end)
-      print(names(data_id[[site]][i]))
+      if(exists("build_df")) {
+        value_name <- quo_name(names(data_id[[site]][i]))
+        build_df <- build_df %>%
+          full_join(
+            get_ODM2_data(series = data_id[[site]][[i]], start = start, end = end) %>%
+              select(
+                valuedateandtime,
+                !! value_name := datavalue
+              ),
+            by = "valuedateandtime"
+          )
+      } else {
+        value_name <- quo_name(names(data_id[[site]][i]))
+        build_df <- get_ODM2_data(series = data_id[[site]][[i]], start = start, end = end) %>% 
+          select(
+            valuedateandtime,
+            !! value_name := datavalue
+          )
+      }
     }
   }
+  final_df <- build_df %>%
+    mutate(
+      datetime = mdy_hms(valuedateandtime)
+    ) %>%
+    select(datetime, everything(), -valuedateandtime)
+  
+  final_df
 }
 
 
