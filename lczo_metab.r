@@ -48,6 +48,29 @@ RI.series.Light <- "16774" #9/3/16 --->
 RI.series.Baro <- "17270" #2/21/17 --->
 RI.series.Depth <- ""
 
+data_id <- list(
+  QS = list(
+    DO = "7",
+    Temp = "8",
+    Light = "16675",
+    Baro = "16154",
+    Depth = ""
+  ),
+  QP = list(
+    DO = "21",
+    Temp = "22",
+    Light = "16672",
+    Baro = "",
+    Depth = "18560"
+  ),
+  RI = list(
+    DO = "17217",
+    Temp = "17218",
+    Light = "16774",
+    Baro = "17270",
+    Depth = ""
+  )
+)
 
 
 # Connect to local DB and download data -----------------------------------
@@ -86,25 +109,8 @@ dbData <-  dbGetQuery(con, "select to_char(valuedatetime, 'MM-DD-YYYY HH24:MI:SS
 # Quebrada Prieta
 
 # TODO --------------------------------------------------------------------
-##### Define time periods
-## Pre-Drought
-# From Gutierrez et al
-## Drought
-# From Gutierrez et al
-## Post-Drought
-# From Gutierrez et al
-## Pre Hurricane
-## Hurricane
-## Post Hurricane
 
-##### Download data from db for time periods
-### Define data system
-## Pre-Drought
-## Drought
-## Post-Drought
-## Pre Hurricane
-## Hurricane
-## Post Hurricane
+
 
 ##### Refactor current code to run for all new data
 ### Tidying
