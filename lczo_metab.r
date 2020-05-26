@@ -127,6 +127,11 @@ get_all_ODM2 <- function(
   final_df
 }
 
+cfs_to_m3s <- function(df) {
+  df %>% 
+    mutate(Discharge = Discharge / 35.3147)
+}
+
 
 
 # Structure ---------------------------------------------------------------
@@ -184,7 +189,6 @@ QS_data <- get_all_ODM2("QS")
 RI_data <- get_all_ODM2("RI")
 QP_data <- get_all_ODM2("QP")
 
-
 RI_usgs_discharge <- readNWISdata( #discharge in cfs
   sites="50075000", service="iv", 
   parameterCd="00060", 
@@ -197,6 +201,13 @@ RI_usgs_discharge <- readNWISdata( #discharge in cfs
 
 RI_data <- RI_data %>% 
   full_join(RI_usgs_discharge, by="datetime")
+
+QS_data <- cfs_to_m3s(QS_data)
+QP_data <- cfs_to_m3s(QP_data)
+RI_data <- cfs_to_m3s(RI_data)
+
+
+
 
 Q_daily <- Q %>% 
   mutate(date = as_date(datetime)) %>% 
