@@ -66,7 +66,7 @@ get_ODM2_data <- function(
   parameter = ''
   ) {
   
-  if (!con@Id[1] > 0) {
+  if (!exists('con')) {
     library('RPostgreSQL')
     con <- dbDriver("PostgreSQL") %>% 
       dbConnect(user="postgres", password="Cranmore12",
@@ -180,7 +180,23 @@ select_value_odmCSV <- function(df) {
   )
 }
 
-Q$discharge <- Q$discharge/35.314666 #Convert to m3/s
+QS_data <- get_all_ODM2("QS")
+RI_data <- get_all_ODM2("RI")
+QP_data <- get_all_ODM2("QP")
+
+
+RI_usgs_discharge <- readNWISdata( #discharge in cfs
+  sites="50075000", service="iv", 
+  parameterCd="00060", 
+  startDate="2015-01-01T00:00Z",endDate="2019-01-01T00:00Z"
+) %>% 
+  select(
+    datetime = dateTime,
+    Discharge = `X_00060_00000`
+  )
+
+RI_data <- RI_data %>% 
+  full_join(RI_usgs_discharge, by="datetime")
 
 Q_daily <- Q %>% 
   mutate(date = as_date(datetime)) %>% 
