@@ -34,6 +34,7 @@ library(xts)
 library(directlabels)
 library(dataRetrieval)
 library('RPostgreSQL')
+library(ggpubr)
 
 #List object of all ODM2 Data series IDs
 #Baros from calc_air_pressure (will check with QS and RI baro to see how they compare)
@@ -252,6 +253,55 @@ make_final <- function(df) {
     )
 }
 
+prelim_charts_1 <- function(df) {
+  df %>% unitted::v() %>%
+    mutate(DO.pctsat = 100 * (DO.obs / DO.sat)) %>%
+    select(solar.time, starts_with('DO')) %>%
+    gather(type, DO.value, starts_with('DO')) %>%
+    mutate(units=ifelse(type == 'DO.pctsat', 'DO\n(% sat)', 'DO\n(mg/L)')) %>%
+    ggplot(aes(x=solar.time, y=DO.value, color=type)) + geom_line() +
+    facet_grid(units ~ ., scale='free_y') + theme_bw() +
+    scale_color_discrete('variable')
+}
+
+prelim_charts_2 <- function(df) {
+  labels <- c(depth='depth\n(m)', temp.water='water temp\n(deg C)', light='PAR\n(umol m^-2 s^-1)')
+  df %>% unitted::v() %>%
+    select(solar.time, depth, temp.water, light) %>%
+    gather(type, value, depth, temp.water, light) %>%
+    mutate(
+      type=ordered(type, levels=c('depth','temp.water','light')),
+      units=ordered(labels[type], unname(labels))) %>%
+    ggplot(aes(x=solar.time, y=value, color=type)) + geom_line() +
+    facet_grid(units ~ ., scale='free_y') + theme_bw() +
+    scale_color_discrete('variable')
+}
+
+prelim_charts_full <- function(df) {
+  
+  title <- paste(deparse(substitute(df)), " Preliminaries")
+  
+  one <- prelim_charts_1(df) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.title.y = element_blank(),
+      legend.title = element_blank()
+    )
+  
+  labels <- c(depth='depth\n(m)', temp.water='water temp\n(deg C)', light='PAR\n(umol m^-2 s^-1)')
+  two <- prelim_charts_2(df) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      legend.title = element_blank()
+    )
+  
+  ggarrange(one, two, ncol = 1, align = "v") %>% 
+    annotate_figure(top = text_grob(title))
+}
+
 
 
 
@@ -361,6 +411,14 @@ QS_data <- remove_leading_trailing_NA(QS_data)
 QP_data <- remove_leading_trailing_NA(QP_data)
 RI_data <- remove_leading_trailing_NA(RI_data)
 
+QS_data <- make_final(QS_data)
+QP_data <- make_final(QP_data)
+RI_data <- make_final(RI_data)
+
+prelim_charts_full(QS_data) %>% ggsave()
+prelim_charts_full(QP_data)
+prelim_charts_full(RI_data)
+
 
 
 # TODO --------------------------------------------------------------------
@@ -376,6 +434,10 @@ RI_data <- remove_leading_trailing_NA(RI_data)
 #### TODO relate QP discharge to QS discharge
 
 #### TODO run with different light regimes
+
+#### TODO try with multiple GPP_fun/ER_fun arguments
+
+#### TODO try multiple "pool_K600" arguments
 
 
 
