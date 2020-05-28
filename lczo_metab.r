@@ -229,6 +229,28 @@ make_daily <- function(df) {
     )
 }
 
+remove_leading_trailing_NA <- function(df) {
+  df %>%
+    group_by(solar.time) %>%
+    filter_at(
+      vars(DO),
+      all_vars(pmin(
+        cumsum(!is.na(.)),
+        rev(cumsum(!is.na(rev(.))))
+        ) != 0)
+      )
+}
+
+make_final <- function(df) {
+  df %>% 
+    select(solar.time,
+           DO.obs = DO,
+           DO.sat,
+           depth = Depth,
+           temp.water = Temp,
+           light = Light
+    )
+}
 
 
 
@@ -335,6 +357,12 @@ QP_data <- PAR_to_merged(QP_data)
 RI_data <- PAR_to_merged(RI_data)
 
 
+QS_data <- remove_leading_trailing_NA(QS_data)
+QP_data <- remove_leading_trailing_NA(QP_data)
+RI_data <- remove_leading_trailing_NA(RI_data)
+
+
+
 # TODO --------------------------------------------------------------------
 
 #### TODO comparison of light with calc_light, Baro with calc_baro, etc.
@@ -347,60 +375,34 @@ RI_data <- PAR_to_merged(RI_data)
 
 #### TODO relate QP discharge to QS discharge
 
+#### TODO run with different light regimes
 
 
 
 
-Q_daily <- Q %>% 
-  mutate(date = as_date(datetime)) %>% 
-  group_by(date) %>% 
-  summarize(discharge.daily = mean(discharge))
 
-lnK <- Q_daily %>% 
-  transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit 
-lnK <- lnK$lnK
-
-qs %>% 
-  subset(is.na(stage))
-
-qs_daily <- qs %>% 
-  mutate(date = as_date(datetime)) %>%
-  group_by(date) %>%
-  summarize(DO = mean(DO, na.rm = TRUE),
-            Temp = mean(Temp, na.rm = TRUE),
-            Light = mean(Light, na.rm = TRUE),
-            Baro = mean(Baro, na.rm = TRUE),
-            Discharge = mean(Discharge, na.rm = TRUE),
-            Depth = mean(Depth, na.rm = TRUE),
-            DO.sat = mean(DO.sat, na.rm = TRUE),
-            Light_calc = mean(Light_calc, na.rm = TRUE),
-            Light_merged = mean(Light_merged, na.rm = TRUE)
-            )
-
-qs <- qs %>% 
-  filter(minute(datetime) %% 15 == 0) #Get rid of extra time points
+# Q_daily <- Q %>% 
+#   mutate(date = as_date(datetime)) %>% 
+#   group_by(date) %>% 
+#   summarize(discharge.daily = mean(discharge))
+# 
+# lnK <- Q_daily %>% 
+#   transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit 
+# lnK <- lnK$lnK
+# 
+# qs %>% 
+#   subset(is.na(stage))
+# 
+# qs <- qs %>% 
+#   filter(minute(datetime) %% 15 == 0) #Get rid of extra time points
 
 # qs <- qs %>%
 #   group_by(date(datetime)) %>% 
 #   mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
 
-#qs now has all data
-#we are going to create new, final dataframe that mirrors example
-
-##POSSIBLE TODO:
-####Figure out how to incorporate unitted
-
-qs_dat <- qs %>% 
-  select(solar.time,
-         DO.obs = conc,
-         DO.sat,
-         depth = stage,
-         temp.water = temp,
-         light
-         )
 
 
-qs_dat %>% unitted::v() %>%
+make_final(QS_data) %>% unitted::v() %>%
   mutate(DO.pctsat = 100 * (DO.obs / DO.sat)) %>%
   select(solar.time, starts_with('DO')) %>%
   gather(type, DO.value, starts_with('DO')) %>%
@@ -410,7 +412,7 @@ qs_dat %>% unitted::v() %>%
   scale_color_discrete('variable')
 
 labels <- c(depth='depth\n(m)', temp.water='water temp\n(deg C)', light='PAR\n(umol m^-2 s^-1)')
-qs_dat %>% unitted::v() %>%
+make_final(QS_data) %>% unitted::v() %>%
   select(solar.time, depth, temp.water, light) %>%
   gather(type, value, depth, temp.water, light) %>%
   mutate(
