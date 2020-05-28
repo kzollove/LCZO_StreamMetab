@@ -185,58 +185,48 @@ fillNA_light <- function(df, lat = 18.3, lon = -65.8) {
     mutate(Light = ifelse(is.na(Light), Light_calc, Light))
 }
 
-
-# PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
-
-
-
-
-
-
-
-
-
 PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
   PAR.obs <- df %>%
     mutate(solar.date = date(solar.time), solar.hour = hour(solar.time)) %>%
     group_by(solar.date, solar.hour) %>%
-    summarize(light = mean(Light)) %>%
+    summarize(light = mean(Light, na.rm = TRUE)) %>%
     mutate(solar.time = ymd_h(paste(solar.date, solar.hour))) %>% 
     ungroup() %>%
-    # mutate(solar.time = force_tz(solar.time, tz = 'Etc/GMT+5')) %>%
-    # mutate(solar.time = calc_solar_time(solar.time, longitude = lon)) %>% 
     select(solar.time, light)
   
   PAR.mod <- df %>%
-    # mutate(solar.time = force_tz(solar.time, tz = 'Etc/GMT+5')) %>%
-    # mutate(solar.time = calc_solar_time(solar.time, longitude = lon)) %>% 
-    select(solar.time, Light_calc)
+    select(solar.time, light = Light_calc)
   
   PAR.merged <- calc_light_merged(PAR.obs = PAR.obs,
                                   solar.time = PAR.mod$solar.time,
                                   latitude=lat,
                                   longitude=lon,
-                                  max.PAR = PAR.mod$Light_calc)
+                                  max.PAR = PAR.mod$light)
   
   df %>% 
     mutate(Light_merged = PAR.merged$light)
 
-  # df %>%
-  #   mutate(Light_merged = PAR.merged[2])
+  ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
+                   mutate(v(PAR.merged), type='merged')) %>%
+           mutate(type=ordered(type, levels=c('obs','mod','merged'))),
+         aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
 
-  # ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
-  #                  mutate(v(PAR.merged), type='merged')) %>%
-  #          mutate(type=ordered(type, levels=c('obs','mod','merged'))),
-  #        aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
+}
 
-
-  # df %>%
-  #   mutate(Light_merged = calc_light_merged(
-  #     PAR.obs = data_frame(solar.time = solar.time, light = Light),
-  #     solar.time = solar.time,
-  #     latitude = lat,
-  #     longitude = lon
-  #     ))
+make_daily <- function(df) {
+  df %>% 
+    mutate(solar.time = as_date(solar.time)) %>%
+    group_by(solar.time) %>%
+    summarize(DO = mean(DO, na.rm = TRUE),
+              Temp = mean(Temp, na.rm = TRUE),
+              Light = mean(Light, na.rm = TRUE),
+              Baro = mean(Baro, na.rm = TRUE),
+              Discharge = mean(Discharge, na.rm = TRUE),
+              Depth = mean(Depth, na.rm = TRUE),
+              DO.sat = mean(DO.sat, na.rm = TRUE),
+              Light_calc = mean(Light_calc, na.rm = TRUE),
+              Light_merged = mean(Light_merged, na.rm = TRUE)
+    )
 }
 
 
@@ -343,21 +333,19 @@ RI_data <- fillNA_light(RI_data)
 QS_data <- PAR_to_merged(QS_data)
 QP_data <- PAR_to_merged(QP_data)
 RI_data <- PAR_to_merged(RI_data)
-# QS_light_merged <- PAR_to_merged(QS_data)[2]
-# RI_light_merged <- PAR_to_merged(RI_data)[2]
-# QP_light_merged <- PAR_to_merged(QP_data)[2]
-
-# RI_data <- RI_data %>% 
-#   mutate(Light_merged = RI_light_merged$light)
-
-
-
-calc_light_merged()
 
 
 # TODO --------------------------------------------------------------------
 
 #### TODO comparison of light with calc_light, Baro with calc_baro, etc.
+
+#### TODO run streamMet as 15 min, hourly, bi-hourly
+
+#### TODO run as a whole, run as distinct pieces
+
+#### TODO how best to split among NA
+
+#### TODO relate QP discharge to QS discharge
 
 
 
@@ -378,11 +366,15 @@ qs %>%
 qs_daily <- qs %>% 
   mutate(date = as_date(datetime)) %>%
   group_by(date) %>%
-  summarize(conc = mean(conc, na.rm = TRUE),
-            temp = mean(temp, na.rm = TRUE),
-            stage = mean(stage, na.rm = TRUE),
-            lux = mean(lux, na.rm = TRUE),
-            pres = mean(pres, na.rm = TRUE)
+  summarize(DO = mean(DO, na.rm = TRUE),
+            Temp = mean(Temp, na.rm = TRUE),
+            Light = mean(Light, na.rm = TRUE),
+            Baro = mean(Baro, na.rm = TRUE),
+            Discharge = mean(Discharge, na.rm = TRUE),
+            Depth = mean(Depth, na.rm = TRUE),
+            DO.sat = mean(DO.sat, na.rm = TRUE),
+            Light_calc = mean(Light_calc, na.rm = TRUE),
+            Light_merged = mean(Light_merged, na.rm = TRUE)
             )
 
 qs <- qs %>% 
@@ -391,24 +383,6 @@ qs <- qs %>%
 # qs <- qs %>%
 #   group_by(date(datetime)) %>% 
 #   mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
-
-qs <- qs %>% 
-  mutate(pres_mbar = pres * 10, #convert kPa to mbar
-         light = lux * 0.0185 #convert lux to ppfd
-         ) 
-
-qs <- qs %>% #Use internal function to calulated DO.sat
-  mutate(DO.sat = calc_DO_sat(temp=u(qs$temp, "degC"), press=u(qs$pres_mbar, "mb"), sal=u(0, "PSU")))
-
-
-
-
-qs$datetime <- qs$datetime %>% 
-  force_tz(tz='Etc/GMT+5') #Assign timezone (EST, no daylight savings)
-
-qs$solar.time <- calc_solar_time(qs$datetime, longitude = -65.8) #Calculate solar time
-
-#qs$cal_light <- calc_light(u(qs$solar.time), u(18.32, 'degN'), u(-65.81, 'degE'), u(4282.162, 'umol m^-2 s^-1'), attach.units=TRUE)
 
 #qs now has all data
 #we are going to create new, final dataframe that mirrors example
