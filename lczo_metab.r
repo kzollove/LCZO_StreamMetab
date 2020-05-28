@@ -17,6 +17,14 @@
 #When preparing data,
 #Access ?mm_data for help
 
+rm(QP_data, QS_data, RI_data) # Clears your environment
+
+
+
+
+# load environment --------------------------------------------------------
+
+
 
 library(streamMetabolizer)
 library(unitted)
@@ -38,12 +46,15 @@ data_id <- list(
     Light = "16675", #8/03/16 --->
     Baro = "16154", #01/12/16 --->
     Discharge = "17274" #09/05/16 --->
+    # lat,lon = 18.3213, -65.8171
+    # elev = 387
   ),
   QP = list(
     DO = "21",
     Temp = "22",
     Light = "16672", #8/30/16 --->
     Discharge = "18657"
+    # lat,lon = 18.323088, -65.815087
     # elev = 384
   ),
   RI = list(
@@ -51,6 +62,8 @@ data_id <- list(
     Temp = "17218",
     Light = "16774", #9/3/16 --->
     Baro = "17270" #2/21/17 --->
+    #lat,lon = 18.275448, -65.785497
+    # elev = 693
   )
 )
 
@@ -70,7 +83,7 @@ get_ODM2_data <- function(
     library('RPostgreSQL')
     con <- dbDriver("PostgreSQL") %>% 
       dbConnect(user="postgres", password="Cranmore12",
-                host="127.0.0.1", port=5432, dbname="ODM2LCZO")
+                host="127.0.0.1", port=5433, dbname="ODM2LCZO")
   }
   
   if(series == '') {
@@ -132,6 +145,109 @@ cfs_to_m3s <- function(df) {
     mutate(Discharge = Discharge / 35.3147)
 }
 
+df_to_depth <- function(df) {
+  df %>% 
+    mutate(Depth = calc_depth(Discharge))
+}
+
+df_to_dosat <- function(df) {
+  df %>% 
+    mutate(DO.sat = calc_DO_sat(temp.water = Temp, pressure.air = Baro))
+}
+
+kpa_to_mbar <- function(df) {
+  df %>% 
+    mutate(Baro = Baro * 10)
+}
+
+fillNA_baro <- function(df, elev) {
+  df %>% 
+    mutate(Baro_calc = calc_air_pressure(temp.air = Temp, elevation = elev)) %>% 
+    mutate(Baro = ifelse(is.na(Baro), Baro_calc, Baro)) %>% 
+    select(-Baro_calc)
+}
+
+datetime_to_solartime <- function(df, lon=-65.8, tz='Etc/GMT+5') {
+  df %>% 
+    mutate(datetime = force_tz(datetime, tz=tz)) %>% 
+    mutate(solar.time = calc_solar_time(datetime, longitude = lon)) %>% 
+    select(solar.time, everything(), -datetime)
+}
+
+light_to_PAR <- function(df) {
+  df %>% 
+    mutate(Light = Light * 0.0185)
+}
+
+fillNA_light <- function(df, lat = 18.3, lon = -65.8) {
+  df %>% 
+    mutate(Light_calc = calc_light(solar.time = solar.time, latitude = lat, longitude = lon)) %>% 
+    mutate(Light = ifelse(is.na(Light), Light_calc, Light))
+}
+
+
+# PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
+
+
+
+
+
+
+
+
+
+PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
+  PAR.obs <- df %>%
+    mutate(solar.date = date(solar.time), solar.hour = hour(solar.time)) %>%
+    group_by(solar.date, solar.hour) %>%
+    summarize(light = mean(Light)) %>%
+    mutate(solar.time = ymd_h(paste(solar.date, solar.hour))) %>% 
+    ungroup() %>%
+    # mutate(solar.time = force_tz(solar.time, tz = 'Etc/GMT+5')) %>%
+    # mutate(solar.time = calc_solar_time(solar.time, longitude = lon)) %>% 
+    select(solar.time, light)
+  
+  PAR.mod <- df %>%
+    # mutate(solar.time = force_tz(solar.time, tz = 'Etc/GMT+5')) %>%
+    # mutate(solar.time = calc_solar_time(solar.time, longitude = lon)) %>% 
+    select(solar.time, Light_calc)
+  
+  PAR.merged <- calc_light_merged(PAR.obs = PAR.obs,
+                                  solar.time = PAR.mod$solar.time,
+                                  latitude=lat,
+                                  longitude=lon,
+                                  max.PAR = PAR.mod$Light_calc)
+  
+  df %>% 
+    mutate(Light_merged = PAR.merged$light)
+
+  # df %>%
+  #   mutate(Light_merged = PAR.merged[2])
+
+  # ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
+  #                  mutate(v(PAR.merged), type='merged')) %>%
+  #          mutate(type=ordered(type, levels=c('obs','mod','merged'))),
+  #        aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
+
+
+  # df %>%
+  #   mutate(Light_merged = calc_light_merged(
+  #     PAR.obs = data_frame(solar.time = solar.time, light = Light),
+  #     solar.time = solar.time,
+  #     latitude = lat,
+  #     longitude = lon
+  #     ))
+}
+
+
+
+
+
+
+
+
+
+
 
 
 # Structure ---------------------------------------------------------------
@@ -148,16 +264,6 @@ cfs_to_m3s <- function(df) {
 # Quebrada Sonadora
 # Quebrada Prieta
 
-# TODO --------------------------------------------------------------------
-#### TODO incorporate calc_depth()
-## calc_depth() takes discharge and estimates depth using hydraulic geometry coefficients
-# this seems to be elaborated on in Raymond et al 2012
-
-
-##### Refactor current code to run for all new data
-### Tidying
-## Merging tables
-## Daily discharges
 
 
 #This function is necessary to make future functions "pipeable"
@@ -202,9 +308,57 @@ RI_usgs_discharge <- readNWISdata( #discharge in cfs
 RI_data <- RI_data %>% 
   full_join(RI_usgs_discharge, by="datetime")
 
+QP_data <- QP_data %>% 
+  mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
+QS_data <- kpa_to_mbar(QS_data)
+RI_data <- kpa_to_mbar(RI_data)
+
+QS_data <- fillNA_baro(QS_data, 387)
+RI_data <- fillNA_baro(RI_data, 693)
+
 QS_data <- cfs_to_m3s(QS_data)
 QP_data <- cfs_to_m3s(QP_data)
 RI_data <- cfs_to_m3s(RI_data)
+
+QS_data <- df_to_depth(QS_data)
+QP_data <- df_to_depth(QP_data)
+RI_data <- df_to_depth(RI_data)
+
+QS_data <- df_to_dosat(QS_data)
+QP_data <- df_to_dosat(QP_data)
+RI_data <- df_to_dosat(RI_data)
+
+QS_data <- datetime_to_solartime(QS_data)
+QP_data <- datetime_to_solartime(QP_data)
+RI_data <- datetime_to_solartime(RI_data)
+
+QS_data <- light_to_PAR(QS_data)
+QP_data <- light_to_PAR(QP_data)
+RI_data <- light_to_PAR(RI_data)
+
+QS_data <- fillNA_light(QS_data)
+QP_data <- fillNA_light(QP_data)
+RI_data <- fillNA_light(RI_data)
+
+QS_data <- PAR_to_merged(QS_data)
+QP_data <- PAR_to_merged(QP_data)
+RI_data <- PAR_to_merged(RI_data)
+# QS_light_merged <- PAR_to_merged(QS_data)[2]
+# RI_light_merged <- PAR_to_merged(RI_data)[2]
+# QP_light_merged <- PAR_to_merged(QP_data)[2]
+
+# RI_data <- RI_data %>% 
+#   mutate(Light_merged = RI_light_merged$light)
+
+
+
+calc_light_merged()
+
+
+# TODO --------------------------------------------------------------------
+
+#### TODO comparison of light with calc_light, Baro with calc_baro, etc.
+
 
 
 
