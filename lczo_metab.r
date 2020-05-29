@@ -207,10 +207,10 @@ PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
   df %>% 
     mutate(Light_merged = PAR.merged$light)
 
-  ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
-                   mutate(v(PAR.merged), type='merged')) %>%
-           mutate(type=ordered(type, levels=c('obs','mod','merged'))),
-         aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
+  # ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
+  #                  mutate(v(PAR.merged), type='merged')) %>%
+  #          mutate(type=ordered(type, levels=c('obs','mod','merged'))),
+  #        aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
 
 }
 
@@ -230,11 +230,11 @@ make_daily <- function(df) {
     )
 }
 
-remove_leading_trailing_NA <- function(df) {
+remove_leading_trailing_NA <- function(df, param = DO) {
   df %>%
     group_by(solar.time) %>%
     filter_at(
-      vars(DO),
+      vars(param),
       all_vars(pmin(
         cumsum(!is.na(.)),
         rev(cumsum(!is.na(rev(.))))
@@ -303,7 +303,17 @@ prelim_charts_full <- function(df) {
 }
 
 
-
+basic_run <- function(df) {
+  hour_start <- hour(round_date(head(df$solar.time, 1), "30 mins"))
+  minute_start <- minute(round_date(head(QS_data$solar.time, 1), "30 mins")) / 60
+  
+  hour_end <- hour(round_date(tail(df$solar.time, 1), "30 mins"))
+  minute_end <- minute(round_date(tail(QS_data$solar.time, 1), "30 mins")) / 60
+  
+  mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
+    specs(day_start = hour_start + minute_end, day_end = hour_start + minute_start) %>%
+    metab(df)
+}
 
 
 
@@ -357,6 +367,10 @@ QS_data <- get_all_ODM2("QS")
 RI_data <- get_all_ODM2("RI")
 QP_data <- get_all_ODM2("QP")
 
+# write_rds(QS_data, path = './data/QS_data_odm2')
+# write_rds(QP_data, path = './data/QP_data_odm2')
+# write_rds(RI_data, path = './data/RI_data_odm2')
+
 RI_usgs_discharge <- readNWISdata( #discharge in cfs
   sites="50075000", service="iv", 
   parameterCd="00060", 
@@ -369,6 +383,9 @@ RI_usgs_discharge <- readNWISdata( #discharge in cfs
 
 RI_data <- RI_data %>% 
   full_join(RI_usgs_discharge, by="datetime")
+
+# write_rds(RI_data, path = './data/RI_data_odm2_USGS')
+
 
 QP_data <- QP_data %>% 
   mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
@@ -415,15 +432,28 @@ QS_data <- make_final(QS_data)
 QP_data <- make_final(QP_data)
 RI_data <- make_final(RI_data)
 
-prelim_charts_full(QS_data) %>% ggsave()
-prelim_charts_full(QP_data)
-prelim_charts_full(RI_data)
+# write_rds(QS_data, path = './data/QS_data_final')
+# write_rds(QP_data, path = './data/QP_data_final')
+# write_rds(RI_data, path = './data/RI_data_final')
+
+# prelim_charts_full(QS_data) %>% ggsave(filename = "QS_prelims", device = "pdf", path = "./plots")
+# prelim_charts_full(QP_data) %>% ggsave(filename = "QP_prelims", device = "pdf", path = "./plots")
+# prelim_charts_full(RI_data) %>% ggsave(filename = "RI_prelims", device = "pdf", path = "./plots")
 
 
 
 # TODO --------------------------------------------------------------------
 
+#### TODO calculate depth from widths and depths (PULSE)
+## average of depth vs. stream gage/discharge
+
 #### TODO comparison of light with calc_light, Baro with calc_baro, etc.
+
+#### TODO scale calc_light down with to match collected light 
+
+#### TODO run streamMet
+
+# Secondary TODO ----------------------------------------------------------
 
 #### TODO run streamMet as 15 min, hourly, bi-hourly
 
@@ -438,6 +468,13 @@ prelim_charts_full(RI_data)
 #### TODO try with multiple GPP_fun/ER_fun arguments
 
 #### TODO try multiple "pool_K600" arguments
+
+
+# Extra TODO --------------------------------------------------------------
+
+#### TODO refactor into different scripts
+
+#### TODO make lczoMetabolizer
 
 
 
@@ -463,26 +500,13 @@ prelim_charts_full(RI_data)
 #   mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
 
 
+QS_data <- read_rds("./data/QS_data_final")
+QP_data <- read_rds("./data/QP_data_final")
+RI_data <- read_rds("./data/RI_data_final")
 
-make_final(QS_data) %>% unitted::v() %>%
-  mutate(DO.pctsat = 100 * (DO.obs / DO.sat)) %>%
-  select(solar.time, starts_with('DO')) %>%
-  gather(type, DO.value, starts_with('DO')) %>%
-  mutate(units=ifelse(type == 'DO.pctsat', 'DO\n(% sat)', 'DO\n(mg/L)')) %>%
-  ggplot(aes(x=solar.time, y=DO.value, color=type)) + geom_line() +
-  facet_grid(units ~ ., scale='free_y') + theme_bw() +
-  scale_color_discrete('variable')
+QS_data_working <- remove_leading_trailing_NA(QS_data, param = 'depth')
 
-labels <- c(depth='depth\n(m)', temp.water='water temp\n(deg C)', light='PAR\n(umol m^-2 s^-1)')
-make_final(QS_data) %>% unitted::v() %>%
-  select(solar.time, depth, temp.water, light) %>%
-  gather(type, value, depth, temp.water, light) %>%
-  mutate(
-    type=ordered(type, levels=c('depth','temp.water','light')),
-    units=ordered(labels[type], unname(labels))) %>%
-  ggplot(aes(x=solar.time, y=value, color=type)) + geom_line() +
-  facet_grid(units ~ ., scale='free_y') + theme_bw() +
-  scale_color_discrete('variable')
+basic_run()
 
 mm_classic <-
   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
