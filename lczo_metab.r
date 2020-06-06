@@ -196,13 +196,25 @@ df_to_dosat <- function(df) {
 kpa_to_mbar <- function(df) {
   df %>% 
     mutate(Baro = Baro * 10)
+    
 }
 
-fillNA_baro <- function(df, elev) {
+fillNA_baro() <- function(df, elev) {
   df %>% 
     mutate(Baro_calc = calc_air_pressure(temp.air = Temp, elevation = elev)) %>% 
     mutate(Baro = ifelse(is.na(Baro), Baro_calc, Baro)) %>% 
     select(-Baro_calc)
+}
+
+handle_DO <- function(df, elev=384) {
+  if ("Baro" %in% names(df)) {
+    df <- kpa_to_mbar(df)
+  } else {
+    df <- df %>% 
+      mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = elev)) 
+  }
+  
+  fillNA_baro(df, elev)
 }
 
 datetime_to_solartime <- function(df, lon=-65.8, tz='Etc/GMT+5') {
@@ -211,6 +223,7 @@ datetime_to_solartime <- function(df, lon=-65.8, tz='Etc/GMT+5') {
     mutate(solar.time = calc_solar_time(datetime, longitude = lon)) %>% 
     select(solar.time, everything(), -datetime)
 }
+
 
 light_to_PAR <- function(df) {
   df %>% 
@@ -431,17 +444,21 @@ select_value_odmCSV <- function(df) {
 # write_rds(QP_data, path = './data/QP_data_odm2')
 # write_rds(RI_data, path = './data/RI_data_odm2')
 
+handle_DO <- function(df) {
+  
+}
 QS_data <- read_rds(path = './data/QS_data_odm2')
 RI_data <- read_rds(path = './data/RI_data_odm2')
 QP_data <- read_rds(path = './data/QP_data_odm2')
 
-QP_data <- QP_data %>% 
-  mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
-QS_data <- kpa_to_mbar(QS_data)
-RI_data <- kpa_to_mbar(RI_data)
+# QP_data <- QP_data %>% 
+#   mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
+# QS_data <- kpa_to_mbar(QS_data)
+# RI_data <- kpa_to_mbar(RI_data)
 
-QS_data <- fillNA_baro(QS_data, 387)
-RI_data <- fillNA_baro(RI_data, 693)
+QP_data <- handle_DO(QP_data, 384)
+QS_data <- handle_DO(QS_data, 387)
+RI_data <- handle_DO(RI_data, 693)
 
 QS_data <- cfs_to_m3s(QS_data)
 QP_data <- cfs_to_m3s(QP_data)
