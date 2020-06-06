@@ -17,7 +17,8 @@
 #When preparing data,
 #Access ?mm_data for help
 
-rm(QP_data, QS_data, RI_data) # Clears your environment
+# rm(list = ls()) #clear your environment
+
 
 
 
@@ -40,7 +41,7 @@ library(ggpubr)
 #Baros from calc_air_pressure (will check with QS and RI baro to see how they compare)
 #Depths derived from discharge
 #Try calc_light_merged
-data_id <- list(
+data_id_L0 <- list(
   QS = list(
     DO = "7",
     Temp = "8",
@@ -67,6 +68,41 @@ data_id <- list(
     # elev = 693
   )
 )
+
+data_id_L1 <- list(
+  QS = list(
+    DO = "16158",
+    Temp = "16157",
+    Light = "17280", #8/03/16 --->
+    Baro = "16154", #01/12/16 ---> #L0
+    Discharge = "18641" #09/05/16 --->
+    # lat,lon = 18.3213, -65.8171
+    # elev = 387
+  ),
+  QP = list(
+    DO = "18614",
+    Temp = "18703",
+    Light = "18625", #8/30/16 --->
+    Discharge = "18668"
+    # lat,lon = 18.323088, -65.815087
+    # elev = 384
+  ),
+  RI = list(
+    DO = "17217", #2/20/17 ---> L0; try 17220 for Adj Conc
+    Temp = "17218", #L0
+    Light = "18633", #9/3/16 --->
+    Baro = "17270" #2/21/17 ---> L0
+    #lat,lon = 18.275448, -65.785497
+    # elev = 693
+  )
+)
+
+if (!exists('con')) {
+  library('RPostgreSQL')
+  con <- dbDriver("PostgreSQL") %>% 
+    dbConnect(user="postgres", password="Cranmore12",
+              host="127.0.0.1", port=5433, dbname="ODM2LCZO")
+}
 
 
 # Connect to local DB and download data -----------------------------------
@@ -107,7 +143,8 @@ get_ODM2_data <- function(
 get_all_ODM2 <- function(
   site,
   start = '2015-01-01 00:00:00',
-  end = '2019-01-01 00:00:00'
+  end = '2019-01-01 00:00:00',
+  data_id = data_id_L1
   ) {
   for (i in seq_along(data_id[[site]])) {
     if (data_id[[site]][[i]] != '') {
@@ -230,7 +267,7 @@ make_daily <- function(df) {
     )
 }
 
-remove_leading_trailing_NA <- function(df, param = DO) {
+remove_leading_trailing_NA <- function(df, param = 'DO') {
   df %>%
     group_by(solar.time) %>%
     filter_at(
@@ -363,29 +400,40 @@ select_value_odmCSV <- function(df) {
   )
 }
 
-QS_data <- get_all_ODM2("QS")
-RI_data <- get_all_ODM2("RI")
-QP_data <- get_all_ODM2("QP")
+# QS_data <- get_all_ODM2("QS")
+# RI_data <- get_all_ODM2("RI")
+# QP_data <- get_all_ODM2("QP")
+# 
 
+
+
+# 
+# 
+# 
+
+
+# RI_usgs_discharge <- readNWISdata( #discharge in cfs
+#   sites="50075000", service="iv", 
+#   parameterCd="00060", 
+#   startDate="2015-01-01T00:00Z",endDate="2019-01-01T00:00Z"
+# ) %>% 
+#   select(
+#     datetime = dateTime,
+#     Discharge = `X_00060_00000`
+#   )
+# 
+# write_rds(RI_usgs_discharge, path = './data/RI_data_odm2_USGS')
+# 
+# RI_data <- RI_data %>% 
+#   full_join(RI_usgs_discharge, by="datetime")
+# 
 # write_rds(QS_data, path = './data/QS_data_odm2')
 # write_rds(QP_data, path = './data/QP_data_odm2')
 # write_rds(RI_data, path = './data/RI_data_odm2')
 
-RI_usgs_discharge <- readNWISdata( #discharge in cfs
-  sites="50075000", service="iv", 
-  parameterCd="00060", 
-  startDate="2015-01-01T00:00Z",endDate="2019-01-01T00:00Z"
-) %>% 
-  select(
-    datetime = dateTime,
-    Discharge = `X_00060_00000`
-  )
-
-RI_data <- RI_data %>% 
-  full_join(RI_usgs_discharge, by="datetime")
-
-# write_rds(RI_data, path = './data/RI_data_odm2_USGS')
-
+QS_data <- read_rds(path = './data/QS_data_odm2')
+RI_data <- read_rds(path = './data/RI_data_odm2')
+QP_data <- read_rds(path = './data/QP_data_odm2')
 
 QP_data <- QP_data %>% 
   mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
@@ -412,35 +460,32 @@ QP_data <- datetime_to_solartime(QP_data)
 RI_data <- datetime_to_solartime(RI_data)
 
 QS_data <- light_to_PAR(QS_data)
-QP_data <- light_to_PAR(QP_data)
-RI_data <- light_to_PAR(RI_data)
+# QP_data <- light_to_PAR(QP_data)
+# RI_data <- light_to_PAR(RI_data)
 
 QS_data <- fillNA_light(QS_data)
-QP_data <- fillNA_light(QP_data)
-RI_data <- fillNA_light(RI_data)
+# QP_data <- fillNA_light(QP_data)
+# RI_data <- fillNA_light(RI_data)
 
 QS_data <- PAR_to_merged(QS_data)
-QP_data <- PAR_to_merged(QP_data)
-RI_data <- PAR_to_merged(RI_data)
+# QP_data <- PAR_to_merged(QP_data)
+# RI_data <- PAR_to_merged(RI_data)
 
 
-QS_data <- remove_leading_trailing_NA(QS_data)
+# QS_data <- remove_leading_trailing_NA(QS_data)
 QP_data <- remove_leading_trailing_NA(QP_data)
 RI_data <- remove_leading_trailing_NA(RI_data)
 
 QS_data <- make_final(QS_data)
 QP_data <- make_final(QP_data)
 RI_data <- make_final(RI_data)
+# prelim_charts_full(QS_data) %>% ggsave(filename = "QS_prelims.pdf", device = "pdf", path = "./plots")
+# prelim_charts_full(QP_data) %>% ggsave(filename = "QP_prelims.pdf", device = "pdf", path = "./plots")
+# prelim_charts_full(RI_data) %>% ggsave(filename = "RI_prelims.pdf", device = "pdf", path = "./plots")
 
-# write_rds(QS_data, path = './data/QS_data_final')
-# write_rds(QP_data, path = './data/QP_data_final')
-# write_rds(RI_data, path = './data/RI_data_final')
-
-# prelim_charts_full(QS_data) %>% ggsave(filename = "QS_prelims", device = "pdf", path = "./plots")
-# prelim_charts_full(QP_data) %>% ggsave(filename = "QP_prelims", device = "pdf", path = "./plots")
-# prelim_charts_full(RI_data) %>% ggsave(filename = "RI_prelims", device = "pdf", path = "./plots")
-
-
+# write_rds(QS_data, "./data/QS_data_final")
+# write_rds(QP_data, "./data/QP_data_final")
+# write_rds(RI_data, "./data/RI_data_final")
 
 # TODO --------------------------------------------------------------------
 
@@ -508,6 +553,10 @@ QS_data_working <- remove_leading_trailing_NA(QS_data, param = 'depth')
 
 basic_run()
 
+mm_QS <- mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
+  specs(day_start = 1.5, day_end = 25.5) %>% #start at 3/29 03:00 and end 4/04 03:00
+  metab(QS_data_working)
+
 mm_classic <-
   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
   specs(day_start = 1.5, day_end = 25.5) %>% #start at 3/29 03:00 and end 4/04 03:00
@@ -554,3 +603,7 @@ metab_Kmodel(
   specs = specs(mm_name('Kmodel', engine = 'mean', predictors = 'discharge.daily')),
   data = mm_data
 )
+
+
+
+
