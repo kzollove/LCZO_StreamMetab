@@ -71,7 +71,7 @@ data_id_L0 <- list(
 
 data_id_L1 <- list(
   QS = list(
-    DO = "16158",
+    DO = "7", #<- L0, L1 -> 16158
     Temp = "16157",
     Light = "17280", #8/03/16 --->
     Baro = "16154", #01/12/16 ---> #L0
@@ -188,6 +188,11 @@ df_to_depth <- function(df) {
     mutate(Depth = calc_depth(Discharge))
 }
 
+handle_Depth <- function(df) {
+  df <- cfs_to_m3s(df)
+  df <- df_to_depth(df)
+}
+
 df_to_dosat <- function(df) {
   df %>% 
     mutate(DO.sat = calc_DO_sat(temp.water = Temp, pressure.air = Baro))
@@ -206,7 +211,7 @@ fillNA_baro() <- function(df, elev) {
     select(-Baro_calc)
 }
 
-handle_DO <- function(df, elev=384) {
+handle_DO <- function(df, elev=384) { #interprets Baro as Kpa units
   if ("Baro" %in% names(df)) {
     df <- kpa_to_mbar(df)
   } else {
@@ -214,7 +219,8 @@ handle_DO <- function(df, elev=384) {
       mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = elev)) 
   }
   
-  fillNA_baro(df, elev)
+  df <- fillNA_baro(df, elev)
+  df <- df_to_dosat(df)
 }
 
 datetime_to_solartime <- function(df, lon=-65.8, tz='Etc/GMT+5') {
@@ -233,36 +239,42 @@ light_to_PAR <- function(df) {
 fillNA_light <- function(df, lat = 18.3, lon = -65.8) {
   df %>% 
     mutate(Light_calc = calc_light(solar.time = solar.time, latitude = lat, longitude = lon)) %>% 
-    mutate(Light = ifelse(is.na(Light), Light_calc, Light))
+    mutate(Light = ifelse(is.na(Light), Light_calc/2, Light))
 }
 
-PAR_to_merged <- function(df, lat = 18.3, lon = -65.8) {
-  PAR.obs <- df %>%
-    mutate(solar.date = date(solar.time), solar.hour = hour(solar.time)) %>%
-    group_by(solar.date, solar.hour) %>%
-    summarize(light = mean(Light, na.rm = TRUE)) %>%
-    mutate(solar.time = ymd_h(paste(solar.date, solar.hour))) %>% 
-    ungroup() %>%
-    select(solar.time, light)
-  
-  PAR.mod <- df %>%
-    select(solar.time, light = Light_calc)
-  
-  PAR.merged <- calc_light_merged(PAR.obs = PAR.obs,
-                                  solar.time = PAR.mod$solar.time,
-                                  latitude=lat,
-                                  longitude=lon,
-                                  max.PAR = PAR.mod$light)
-  
-  df %>% 
-    mutate(Light_merged = PAR.merged$light)
-
-  # ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
-  #                  mutate(v(PAR.merged), type='merged')) %>%
-  #          mutate(type=ordered(type, levels=c('obs','mod','merged'))),
-  #        aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
-
+handle_Light <- function(df, lat = 18.3, lon = -65.8, tz='Etc/GMT+5') {
+  df <- datetime_to_solartime(df, lon = lon, tz = tz)
+  df <- light_to_PAR(df)
+  df <- fillNA_light(df, lat = lat, lon = lon)
 }
+
+# PAR_to_merged <- function(df, lat = 18.3, lon = -65.8, max_light = 1000) {
+#   PAR.obs <- df %>%
+#     mutate(solar.date = date(solar.time), solar.hour = hour(solar.time)) %>%
+#     group_by(solar.date, solar.hour) %>%
+#     summarize(light = mean(Light, na.rm = TRUE)) %>%
+#     mutate(solar.time = ymd_h(paste(solar.date, solar.hour))) %>% 
+#     ungroup() %>%
+#     select(solar.time, light)
+#   
+#   PAR.mod <- df %>%
+#     select(solar.time, light = Light_calc)
+#   
+#   PAR.merged <- calc_light_merged(PAR.obs = PAR.obs,
+#                                   solar.time = PAR.mod$solar.time,
+#                                   latitude=lat,
+#                                   longitude=lon,
+#                                   max.PAR = max_light)
+#   
+#   df %>% 
+#     mutate(Light_merged = PAR.merged$light)
+# 
+#   # ggplot(bind_rows(mutate(v(PAR.obs), type='obs'), mutate(v(PAR.mod), type='mod'),
+#   #                  mutate(v(PAR.merged), type='merged')) %>%
+#   #          mutate(type=ordered(type, levels=c('obs','mod','merged'))),
+#   #        aes(x=solar.time, y=light, color=type)) + geom_line() + geom_point() + theme_bw()
+# 
+# }
 
 make_daily <- function(df) {
   df %>% 
@@ -299,7 +311,7 @@ make_final <- function(df) {
            DO.sat,
            depth = Depth,
            temp.water = Temp,
-           light = Light
+           light = Light_merged
     )
 }
 
@@ -353,15 +365,18 @@ prelim_charts_full <- function(df) {
 }
 
 
-basic_run <- function(df) {
+mle_run <- function(df) {
   hour_start <- hour(round_date(head(df$solar.time, 1), "30 mins"))
   minute_start <- minute(round_date(head(QS_data$solar.time, 1), "30 mins")) / 60
   
   hour_end <- hour(round_date(tail(df$solar.time, 1), "30 mins"))
   minute_end <- minute(round_date(tail(QS_data$solar.time, 1), "30 mins")) / 60
   
+  day_start = (hour_start + minute_end) - 24
+  day_end = 24 + (hour_end + minute_end)
+  
   mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
-    specs(day_start = hour_start + minute_end, day_end = hour_start + minute_start) %>%
+    specs(day_start = day_start, day_end = day_end) %>%
     metab(df)
 }
 
@@ -416,7 +431,7 @@ select_value_odmCSV <- function(df) {
 # QS_data <- get_all_ODM2("QS")
 # RI_data <- get_all_ODM2("RI")
 # QP_data <- get_all_ODM2("QP")
-# 
+
 
 
 
@@ -440,69 +455,42 @@ select_value_odmCSV <- function(df) {
 # RI_data <- RI_data %>% 
 #   full_join(RI_usgs_discharge, by="datetime")
 # 
-# write_rds(QS_data, path = './data/QS_data_odm2')
-# write_rds(QP_data, path = './data/QP_data_odm2')
-# write_rds(RI_data, path = './data/RI_data_odm2')
+#write_rds(QS_data, path = './data/raw/QS_data_odm2')
+# write_rds(QP_data, path = './data/raw/QP_data_odm2')
+# write_rds(RI_data, path = './data/raw/RI_data_odm2')
 
-handle_DO <- function(df) {
-  
-}
-QS_data <- read_rds(path = './data/QS_data_odm2')
-RI_data <- read_rds(path = './data/RI_data_odm2')
-QP_data <- read_rds(path = './data/QP_data_odm2')
-
-# QP_data <- QP_data %>% 
-#   mutate(Baro = calc_air_pressure(temp.air = Temp, elevation = 384))
-# QS_data <- kpa_to_mbar(QS_data)
-# RI_data <- kpa_to_mbar(RI_data)
+QS_data <- read_rds(path = './data/raw/QS_data_odm2')
+RI_data <- read_rds(path = './data/raw/RI_data_odm2')
+QP_data <- read_rds(path = './data/raw/QP_data_odm2')
 
 QP_data <- handle_DO(QP_data, 384)
 QS_data <- handle_DO(QS_data, 387)
 RI_data <- handle_DO(RI_data, 693)
 
-QS_data <- cfs_to_m3s(QS_data)
-QP_data <- cfs_to_m3s(QP_data)
-RI_data <- cfs_to_m3s(RI_data)
+QP_data <- handle_Depth(QP_data)
+QS_data <- handle_Depth(QS_data)
+RI_data <- handle_Depth(RI_data)
 
-QS_data <- df_to_depth(QS_data)
-QP_data <- df_to_depth(QP_data)
-RI_data <- df_to_depth(RI_data)
-
-QS_data <- df_to_dosat(QS_data)
-QP_data <- df_to_dosat(QP_data)
-RI_data <- df_to_dosat(RI_data)
-
-QS_data <- datetime_to_solartime(QS_data)
-QP_data <- datetime_to_solartime(QP_data)
-RI_data <- datetime_to_solartime(RI_data)
-
-QS_data <- light_to_PAR(QS_data)
-# QP_data <- light_to_PAR(QP_data)
-# RI_data <- light_to_PAR(RI_data)
-
-QS_data <- fillNA_light(QS_data)
-# QP_data <- fillNA_light(QP_data)
-# RI_data <- fillNA_light(RI_data)
-
-QS_data <- PAR_to_merged(QS_data)
-# QP_data <- PAR_to_merged(QP_data)
-# RI_data <- PAR_to_merged(RI_data)
+QP_data <- handle_Light(QP_data)
+QS_data <- handle_Light(QS_data)
+RI_data <- handle_Light(RI_data)
 
 
-# QS_data <- remove_leading_trailing_NA(QS_data)
+QS_data <- remove_leading_trailing_NA(QS_data)
 QP_data <- remove_leading_trailing_NA(QP_data)
 RI_data <- remove_leading_trailing_NA(RI_data)
 
 QS_data <- make_final(QS_data)
 QP_data <- make_final(QP_data)
 RI_data <- make_final(RI_data)
-# prelim_charts_full(QS_data) %>% ggsave(filename = "QS_prelims.pdf", device = "pdf", path = "./plots")
-# prelim_charts_full(QP_data) %>% ggsave(filename = "QP_prelims.pdf", device = "pdf", path = "./plots")
-# prelim_charts_full(RI_data) %>% ggsave(filename = "RI_prelims.pdf", device = "pdf", path = "./plots")
 
-# write_rds(QS_data, "./data/QS_data_final")
-# write_rds(QP_data, "./data/QP_data_final")
-# write_rds(RI_data, "./data/RI_data_final")
+prelim_charts_full(QS_data) %>% ggsave(filename = "QS_prelims_calc.pdf", device = "pdf", path = "./plots")
+prelim_charts_full(QP_data) %>% ggsave(filename = "QP_prelims_calc.pdf", device = "pdf", path = "./plots")
+prelim_charts_full(RI_data) %>% ggsave(filename = "RI_prelims_calc.pdf", device = "pdf", path = "./plots")
+
+write_rds(QS_data, "./data/prelims/QS_data_final")
+write_rds(QP_data, "./data/prelims/QP_data_final")
+write_rds(RI_data, "./data/prelims/RI_data_final")
 
 # TODO --------------------------------------------------------------------
 
@@ -562,26 +550,50 @@ RI_data <- make_final(RI_data)
 #   mutate(conc = ifelse(is.na(conc), mean(conc, na.rm = TRUE), conc))
 
 
-QS_data <- read_rds("./data/QS_data_final")
-QP_data <- read_rds("./data/QP_data_final")
-RI_data <- read_rds("./data/RI_data_final")
+QS_data <- read_rds("./data/prelims/QS_data_final")
+QP_data <- read_rds("./data/prelims/QP_data_final")
+RI_data <- read_rds("./data/prelims/RI_data_final")
 
-QS_data_working <- remove_leading_trailing_NA(QS_data, param = 'depth')
 
-basic_run()
+mle_QS <- mle_run(QS_data)
+mle_QP <- mle_run(QP_data)
+mle_RI <- mle_run(RI_data)
 
-mm_QS <- mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
-  specs(day_start = 1.5, day_end = 25.5) %>% #start at 3/29 03:00 and end 4/04 03:00
-  metab(QS_data_working)
 
-mm_classic <-
-  mm_name('mle', GPP_fun='linlight', ER_fun='constant') %>%
-  specs(day_start = 1.5, day_end = 25.5) %>% #start at 3/29 03:00 and end 4/04 03:00
-  metab(qs_dat)
-mm_classic
+mle_QS %>% write_rds('./data/calculated/mle_QS')
+mle_QP %>% write_rds('./data/calculated/mle_QP')
+mle_RI %>% write_rds('./data/calculated/mle_RI')
 
-get_params(mm_classic) %>%
+get_params(mle_RI) %>%
   select(date, warnings, errors)
+
+
+prediction_plots <- function(metab_set) {
+  
+  title <- paste(deparse(substitute(metab_set)), " Preliminaries")
+  
+  DO <- plot_DO_preds(metab_set) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.title.y = element_blank(),
+      legend.title = element_blank()
+    )
+  
+  metab <- plot_metab_preds(metab_set) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      legend.title = element_blank()
+    )
+  
+  
+  ggarrange(DO, metab, ncol = 1, align = "v") %>% 
+    annotate_figure(top = text_grob(title), left = text_grob("Predictions", rot = 90))
+  
+}
+
 
 
 # bayes_name <- mm_name(type='bayes', pool_K600="binned", err_obs_iid=TRUE, err_proc_iid=TRUE)
@@ -591,7 +603,7 @@ get_params(mm_classic) %>%
 # 
 # mm
 
-plot_DO_preds(mm_classic)
+
 
 K600_compare <- Q_daily %>% 
   mutate(
