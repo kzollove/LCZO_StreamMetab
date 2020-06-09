@@ -36,6 +36,7 @@ library(directlabels)
 library(dataRetrieval)
 library('RPostgreSQL')
 library(ggpubr)
+theme_set(theme_light())
 
 #List object of all ODM2 Data series IDs
 #Baros from calc_air_pressure (will check with QS and RI baro to see how they compare)
@@ -311,7 +312,8 @@ make_final <- function(df) {
            DO.sat,
            depth = Depth,
            temp.water = Temp,
-           light = Light_merged
+           light = Light,
+           discharge = Discharge
     )
 }
 
@@ -555,6 +557,29 @@ QP_data <- read_rds("./data/prelims/QP_data_final")
 RI_data <- read_rds("./data/prelims/RI_data_final")
 
 
+DO_data <- QS_data %>%
+  full_join(QP_data, by = 'solar.time') %>% 
+  full_join(RI_data, by = 'solar.time') %>% 
+  select(solar.time,
+         DO_QS = DO.obs.x,
+         DO_QP = DO.obs.y,
+         DO_RI = DO.obs,
+         depth_QS = depth.x,
+         depth_QP = depth.y,
+         depth_RI = depth) %>% 
+  gather(
+    type,
+    do_value,
+    DO_QS:DO_RI
+  )
+
+DO_data %>% 
+  filter(solar.time >= '2017-08-01', solar.time < '2018-04-01') %>% 
+  ggplot(aes(x = solar.time, y = do_value, color = type)) + 
+  geom_line() +
+  geom_line(aes(y = depth_QP), linetype = 'dashed')
+  
+  
 mle_QS <- mle_run(QS_data)
 mle_QP <- mle_run(QP_data)
 mle_RI <- mle_run(RI_data)
