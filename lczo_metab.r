@@ -35,38 +35,17 @@ mle_run <- function(df) {
 #### TODO calculate depth from widths and depths (PULSE)
 ## average of depth vs. stream gage/discharge
 
-#### TODO comparison of light with calc_light, Baro with calc_baro, etc.
-
-#### TODO scale calc_light down with to match collected light 
-
-#### TODO run streamMet
-
-# Secondary TODO ----------------------------------------------------------
-
 #### TODO run streamMet as 15 min, hourly, bi-hourly
 
 #### TODO run as a whole, run as distinct pieces
 
 #### TODO how best to split among NA
 
-#### TODO relate QP discharge to QS discharge
-
-#### TODO run with different light regimes
+#### TODO use Miss Forest R package  (email with Pablo)
 
 #### TODO try with multiple GPP_fun/ER_fun arguments
 
 #### TODO try multiple "pool_K600" arguments
-
-
-# Extra TODO --------------------------------------------------------------
-
-#### TODO refactor into different scripts
-
-#### TODO make lczoMetabolizer
-
-
-
-
 
 # Q_daily <- Q %>% 
 #   mutate(date = as_date(datetime)) %>% 
@@ -115,6 +94,8 @@ DO_data %>%
   geom_line() +
   geom_line(aes(y = depth_QP), linetype = 'dashed')
   
+
+
   
 mle_QS <- mle_run(QS_data[!duplicated(QS_data[c('solar.time')]),])
 mle_QP <- mle_run(QP_data)
