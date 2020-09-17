@@ -47,15 +47,15 @@ mle_run <- function(df) {
 
 #### TODO try multiple "pool_K600" arguments
 
-# Q_daily <- Q %>% 
-#   mutate(date = as_date(datetime)) %>% 
-#   group_by(date) %>% 
+# Q_daily <- Q %>%
+#   mutate(date = as_date(datetime)) %>%
+#   group_by(date) %>%
 #   summarize(discharge.daily = mean(discharge))
 # 
-# lnK <- Q_daily %>% 
-#   transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit 
+# lnK <- Q_daily %>%
+#   transmute(lnK = log(Q_daily$discharge.daily * 2369.2 + 18.909)) #Calculate daily lnK from Q ~ K fit
 # lnK <- lnK$lnK
-# 
+
 # qs %>% 
 #   subset(is.na(stage))
 # 
@@ -71,44 +71,98 @@ QS_data <- read_rds("./data/prelims/QS_data_final")
 QP_data <- read_rds("./data/prelims/QP_data_final")
 RI_data <- read_rds("./data/prelims/RI_data_final")
 
-
-DO_data <- QS_data %>%
-  full_join(QP_data, by = 'solar.time') %>% 
-  full_join(RI_data, by = 'solar.time') %>% 
-  select(solar.time,
-         DO_QS = DO.obs.x,
-         DO_QP = DO.obs.y,
-         DO_RI = DO.obs,
-         depth_QS = depth.x,
-         depth_QP = depth.y,
-         depth_RI = depth) %>% 
-  gather(
-    type,
-    do_value,
-    DO_QS:DO_RI
-  )
-
-DO_data %>% 
-  filter(solar.time >= '2017-08-01', solar.time < '2018-04-01') %>% 
-  ggplot(aes(x = solar.time, y = do_value, color = type)) + 
-  geom_line() +
-  geom_line(aes(y = depth_QP), linetype = 'dashed')
+QS_data <- QS_data[!duplicated(QS_data[c('solar.time')]),]
+# # Month runner
+# QS_months<- unique(
+#   c(
+#     paste0(
+#       year(QS_data$solar.time),
+#       '-',
+#       month(QS_data$solar.time),
+#       '-01')
+#   )
+# )
+# 
+# QS_months_real <- c()
+# for (i in 1:(length(QS_months)-1)) {
+#   dat <- QS_data %>% 
+#     select(solar.time, depth) %>%
+#     filter(
+#       solar.time >= date(QS_months[i]), solar.time < date(QS_months[i+1]))
+#   print('filtered')
+#   if (!all(is.na(dat$depth))) {
+#     QS_months_real <- c(QS_months_real, QS_months[i])
+#   }
+# }
+# 
+# 
+# 
+# 
+# mle_QS_months <- c()
+# for (i in 1:(length(QS_months_real)-1)) {
+#   chunk <- paste0(
+#     month(QS_months_real[i], label = TRUE),
+#     year(QS_months_real[i])
+#   )
+#   
+#   print(chunk)
+#   
+#   dat <- QS_data %>%
+#     filter(
+#       solar.time >= date(QS_months_real[i]), solar.time < date(QS_months_real[i+1]))
+#   print('filtered')
+#   if (!all(is.na(dat$depth))) {
+#     print('running mle')
+#     x <- mle_run(dat)
+#     mle_QS_months[chunk] <- c(x)
+#     # print(chunk)
+#   }
+#   print('next')
+#   
+#   
+# }
   
-
-
-  
-mle_QS <- mle_run(QS_data[!duplicated(QS_data[c('solar.time')]),])
-mle_QP <- mle_run(QP_data)
-mle_RI <- mle_run(RI_data)
+mle_QS_full <- mle_run(QS_data)
+mle_QP_full <- mle_run(QP_data)
+mle_RI_full <- mle_run(RI_data)
 
 
 mle_QS %>% write_rds('./data/calculated/mle_QS')
 mle_QP %>% write_rds('./data/calculated/mle_QP')
 mle_RI %>% write_rds('./data/calculated/mle_RI')
 
+RI_pred_dates <- mle_RI@metab_daily$date
+RI_months <- unique(
+  c(
+    paste0(
+      year(RI_pred_dates),
+      '-',
+      month(RI_pred_dates),
+      '-01')
+    )
+  )
+
+by_month <- c()
+
+for (i in 1:(length(RI_months)-1)) {
+  
+  chunk <- paste0(
+    month(RI_months[i], label = TRUE),
+    year(RI_months[i])
+  )
+  
+  x <- mle_RI@metab_daily %>%
+                  filter(date >= date(RI_months[i]), date < date(RI_months[i+1]))
+  print(str(x))
+  by_month[chunk] <- x
+  # print(chunk)
+  
+}
+
+print(paste(RI_months[i], RI_months[i+1]))
+
 get_params(mle_RI) %>%
   select(date, warnings, errors)
-
 
 
 
