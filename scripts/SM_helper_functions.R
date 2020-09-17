@@ -16,6 +16,21 @@ make_daily <- function(df) {
     )
 }
 
+make_subset <- function(df, start, end) {
+  df %>% 
+    filter(solar.time >= start, solar.time < end)
+}
+
+make_hourly <- function(df) {
+  df %>%
+    mutate(
+      Hour = hour(solar.time),
+      Day = day(solar.time)
+    ) %>% 
+    dplyr::group_by(Day, Hour) %>%
+    summarize(across(everything(), mean, na.rm = TRUE))
+}
+
 remove_leading_trailing_NA <- function(df, param = 'DO') {
   df %>%
     group_by(solar.time) %>%
